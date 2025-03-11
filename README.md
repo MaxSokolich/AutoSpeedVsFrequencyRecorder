@@ -15,6 +15,6 @@ Possibly:
 
 
 
-pyuic5 uis/GUI.ui -o gui_widgets.py
 
+/opt/homebrew/bin/python3.9 -m PyQt5.uic.pyuic uis/SvF_GUI.ui -o gui_widgets.py
 

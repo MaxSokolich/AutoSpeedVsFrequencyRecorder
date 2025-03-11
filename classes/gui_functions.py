@@ -112,16 +112,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setFile()
      
 
-        #tracker tab functions
-        self.ui.pausebutton.hide()
-        self.ui.leftbutton.hide()
-        self.ui.rightbutton.hide()
+
         
         self.ui.choosevideobutton.clicked.connect(self.selectFile)
         self.ui.trackbutton.clicked.connect(self.track)
-        self.ui.pausebutton.clicked.connect(self.pause)
-        self.ui.rightbutton.clicked.connect(self.frameright)
-        self.ui.leftbutton.clicked.connect(self.frameleft)
+  
         self.ui.maskbutton.clicked.connect(self.showmask)
         self.ui.maskinvert_checkBox.toggled.connect(self.invertmaskcommand)
     
@@ -141,28 +136,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.exposurebox.valueChanged.connect(self.get_exposure)
         self.ui.croppedmasktoggle.clicked.connect(self.showcroppedoriginal)
         self.ui.croppedrecordbutton.clicked.connect(self.croppedrecordfunction)
+
+        
   
 
 
 
     
-    def update_actions(self, robot_list):
+    def update_actions(self, robot_list, frame):
        
 
         if self.ui.apply_button.isChecked():
-            
             #data from algorithm class
-            Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq = self.algorithm.run(robot_list)
+            Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq, frame = self.algorithm.run(robot_list, frame)
             self.arduino.send(Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq)
+        
+        
         else:
             Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq = 0,0,0,0,0,0,0,0,0
             self.arduino.send(Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq)
-
-
-
-
-
-
 
 
         #DEFINE CURRENT ROBOT PARAMS TO A LIST
@@ -187,6 +179,35 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.save_status == True:
             for (sheet, bot) in zip(self.robot_params_sheets,self.robots):
                 sheet.append(bot[:-1])
+        
+
+
+        #display frame
+        frame = self.handle_zoom(frame)
+    
+        self.currentframe = frame
+        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+      
+        bytes_per_line = ch * w
+        convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
+        p = convert_to_Qt_format.scaled(self.display_width, self.display_height, Qt.KeepAspectRatio)
+        qt_img = QPixmap.fromImage(p)
+       
+        #update frame slider too
+        self.ui.framelabel.setText("Frame:"+str(self.frame_number))
+        if self.videopath !=0:
+            self.ui.frameslider.setValue(self.tracker.framenum)
+        
+        #also update robot info
+        if len(self.robots) > 0:
+            robot_diameter = round(np.sqrt(4*self.robots[-1][8]/np.pi),1)
+            self.ui.vellcdnum.display(int(self.robots[-1][6]))
+            self.ui.blurlcdnum.display(int(self.robots[-1][7]))
+            self.ui.sizelcdnum.display(robot_diameter)
+                
+       
+        self.ui.VideoFeedLabel.setPixmap(qt_img)
       
 
 
@@ -323,34 +344,9 @@ class MainWindow(QtWidgets.QMainWindow):
             
             
 
-    def update_image(self, frame):
-        """Updates the image_label with a new opencv image"""
  
-        frame = self.handle_zoom(frame)
-    
-        self.currentframe = frame
-        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
-      
-        bytes_per_line = ch * w
-        convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
-        p = convert_to_Qt_format.scaled(self.display_width, self.display_height, Qt.KeepAspectRatio)
-        qt_img = QPixmap.fromImage(p)
+ 
        
-        #update frame slider too
-        self.ui.framelabel.setText("Frame:"+str(self.frame_number))
-        if self.videopath !=0:
-            self.ui.frameslider.setValue(self.tracker.framenum)
-        
-        #also update robot info
-        if len(self.robots) > 0:
-            robot_diameter = round(np.sqrt(4*self.robots[-1][8]/np.pi),1)
-            self.ui.vellcdnum.display(int(self.robots[-1][6]))
-            self.ui.blurlcdnum.display(int(self.robots[-1][7]))
-            self.ui.sizelcdnum.display(robot_diameter)
-                
-       
-        self.ui.VideoFeedLabel.setPixmap(qt_img)
         
         
 
@@ -429,15 +425,10 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 self.cap  = cv2.VideoCapture(0) 
                 self.tbprint("No EasyPySpin Camera Available")
-            self.ui.pausebutton.hide()
-            self.ui.leftbutton.hide()
-            self.ui.rightbutton.hide()
-            self.ui.frameslider.hide()
+      
         else:
             self.cap  = cv2.VideoCapture(self.videopath)
-            self.ui.pausebutton.show()
-            self.ui.leftbutton.show()
-            self.ui.rightbutton.show()
+ 
         
         self.video_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.video_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -498,9 +489,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.setFile()
                 
                 self.tracker = VideoThread(self)
-                self.tracker.change_pixmap_signal.connect(self.update_image)
+
                 self.tracker.cropped_frame_signal.connect(self.update_croppedimage)
-                self.tracker.robot_list_signal.connect(self.update_actions)
+                self.tracker.pyqt5_signal.connect(self.update_actions)
                 self.tracker.start()
 
                 self.ui.trackbutton.setText("Stop")
@@ -522,13 +513,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.ui.maskbutton.setText("Mask")
                     self.ui.maskbutton.setChecked(False)
 
-                    #also reset pause button
-                    self.ui.pausebutton.setChecked(False)
-                    self.ui.pausebutton.setText("Pause")
-
-                    self.ui.pausebutton.hide()
-                    self.ui.leftbutton.hide()
-                    self.ui.rightbutton.hide()
+             
                 
 
                     #zero arduino commands
@@ -572,27 +557,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.maskinvert_checkBox.setText("Invert Mask: " + str(self.ui.maskinvert_checkBox.isChecked()))
             self.tracker.maskinvert = self.ui.maskinvert_checkBox.isChecked()
 
-    def pause(self):
-        if self.videopath != 0:
-            if self.ui.pausebutton.isChecked():
-                self.tracker._play_flag = False
-                self.ui.pausebutton.setText("Play")
-              
-            else:#play
-                self.tracker._play_flag = True
-                self.ui.pausebutton.setText("Pause")
-                
-    def frameright(self):
-        if self.videopath != 0:
-            self.tracker.framenum+=1
-            self.ui.frameslider.setValue(self.tracker.framenum)
-            self.ui.framelabel.setText("Frame:"+str(self.tracker.framenum))
 
-    def frameleft(self):
-        if self.videopath != 0:
-            self.tracker.framenum-=1
-            self.ui.frameslider.setValue(self.tracker.framenum)
-            self.ui.framelabel.setText("Frame:"+str(self.tracker.framenum))
 
     
     
@@ -616,6 +581,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tracker.robot_mask_dilation = robotdilation
             self.tracker.robot_mask_blur = robotmaskblur
             self.tracker.robot_crop_length = robotcrop_length
+
+            
 
 
 
