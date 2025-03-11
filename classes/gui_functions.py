@@ -84,7 +84,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         elif "Windows" in platform.platform():
             self.tbprint("Detected OS:  Windows")
-            PORT = "COM4"
+            PORT = "COM3"
         else:
             self.tbprint("undetected operating system")
             PORT = None
@@ -104,9 +104,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cap = None
         self.tracker = None
         self.recorder = None
+        self.algorithm_status = False
 
         self.save_status = False
         self.output_workbook = None
+        self.magnetic_field_list = []
         
 
         self.setFile()
@@ -136,25 +138,39 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.exposurebox.valueChanged.connect(self.get_exposure)
         self.ui.croppedmasktoggle.clicked.connect(self.showcroppedoriginal)
         self.ui.croppedrecordbutton.clicked.connect(self.croppedrecordfunction)
+        self.ui.apply_button.clicked.connect(self.apply_button)
 
         
   
 
 
+    def apply_button(self):
+        if self.ui.apply_button.isChecked():
+            self.algorithm_status = True
+            self.ui.apply_button.setText("Stop")
+            self.algorithm.freq = 0
+            self.algorithm.counter = 0
+        else:
+            self.algorithm_status = False
+            self.ui.apply_button.setText("Apply Algorithm")
+            
 
     
     def update_actions(self, robot_list, frame):
        
 
-        if self.ui.apply_button.isChecked():
+        if self.algorithm_status == True:
             #data from algorithm class
             Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq, frame = self.algorithm.run(robot_list, frame)
-            self.arduino.send(Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq)
+            
+            self.arduino.send(Bx, By, Bz, alpha, gamma, freq, psi, gradient, 0, acoustic_freq)
+            #self.arduino.send(0, 0, 0, 0, np.pi/2, 40, np.pi/2, 0, 0, 0)
+            
         
         
         else:
-            Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq = 0,0,0,0,0,0,0,0,0
-            self.arduino.send(Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq)
+            Bx, By, Bz, alpha, gamma, freq, psi, gradient, equal_field, acoustic_freq = 0,0,0,0,0,0,0,0,0,0
+            self.arduino.send(Bx, By, Bz, alpha, gamma, freq, psi, gradient,equal_field, acoustic_freq)
 
 
         #DEFINE CURRENT ROBOT PARAMS TO A LIST
@@ -176,7 +192,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.robots.append(currentbot_params)
         
         #IF SAVE STATUS THEN CONTINOUSLY SAVE THE CURRENT ROBOT PARAMS AND MAGNETIC FIELD PARAMS TO AN EXCEL ROWS
+        self.actions = [self.frame_number, Bx, By, Bz, alpha, gamma, freq, psi, gradient, 0,
+                        0, 1, 2, 3] 
+        
         if self.save_status == True:
+            self.magnetic_field_sheet.append(self.actions)
             for (sheet, bot) in zip(self.robot_params_sheets,self.robots):
                 sheet.append(bot[:-1])
         
@@ -214,13 +234,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def start_data_record(self):
         self.output_workbook = openpyxl.Workbook()
-            
+        
+        
+        self.magnetic_field_sheet = self.output_workbook.create_sheet(title="Magnetic Field Actions")
+        self.magnetic_field_sheet.append(["Frame","Bx", "By", "Bz", "Alpha", "Gamma", "Rolling Frequency", "Psi", "Gradient?","Equal Field?", "Acoustic Frequency","Sensor Bx", "Sensor By", "Sensor Bz"])
 
         #create sheet for robot data
         self.robot_params_sheets = []
         for i in range(len(self.robots)):
             robot_sheet = self.output_workbook.create_sheet(title= "Robot {}".format(i+1))
-            robot_sheet.append(["Frame","Times","Pos X", "Pos Y", "Vel X", "Vel Y", "Vel Mag", "Blur", "Area", "Avg Area", "Cropped X","Cropped Y","Cropped W","Cropped H","Stuck?","Path X", "Path Y"])
+            robot_sheet.append(["Frame","Time(s)","Pos X (px)", "Pos Y (px)", "Vel X (um/s)", "Vel Y (um/s)", "Vel Mag (um/s)", "Blur", "Area (um^2)", "Avg Area (um^2)", "Cropped X (px)","Cropped Y (px)","Cropped W (px)","Cropped H (px)","um2pixel","Path X (px)", "Path Y (px)"])
+    
             self.robot_params_sheets.append(robot_sheet)
         
 
@@ -417,9 +441,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def setFile(self):
         if self.videopath == 0:
             try:
-                self.cap  = cv2.VideoCapture(0)
-                #self.cap  = EasyPySpin.VideoCapture(0)
-                #self.cap.set(cv2.CAP_PROP_AUTO_WB, True)
+                #self.cap  = cv2.VideoCapture(0)
+                self.cap  = EasyPySpin.VideoCapture(0)
+                self.cap.set(cv2.CAP_PROP_AUTO_WB, True)
+               
                 #self.cap.set(cv2.CAP_PROP_FPS, 30)
                 #self.cap.set(cv2.CAP_PROP_FPS, 30)
             except Exception:

@@ -5,11 +5,14 @@ import cv2
 
 class algorithm:
     def __init__(self):
+        self.counter = 0
         self.current_node = 0 
         self.arrivialthresh = 15
         self.node_number = 100
         self.radius_scale = 5
-        self.freq = 40
+        self.freq = 0
+        self.freq_interval = 100
+        self.freq_increment = 1
 
 
     def make_path(self, frame):
@@ -47,65 +50,77 @@ class algorithm:
         input: data about robot. eg, velocity or position
         output: magnetic field action commands
         """
-        
-        
-        #input:  robot_list which stores all the attributes for each robot you select
-        for bot_num in range(len(robot_list)):
-            robot = robot_list[bot_num]
-            pos = robot.position_list[-1]
-            print("robot {} pos = {}".format(bot_num, pos))
-
-
-
         # make circle 
-        frame, coordinates = self.make_path(frame)
+        frame, target_coordinates = self.make_path(frame)
         
+        if len(robot_list) > 0:
+            #input:  robot_list which stores all the attributes for each robot you select
 
-
-        
-
-        #define target coordinate
-        targetx = coordinates[self.current_node][0]
-        targety = coordinates[self.current_node][1]
-
-        #define robots current position
-        robotx = robot_list[-1].position_list[-1][0]
-        roboty = robot_list[-1].position_list[-1][1]
-        
-        #calculate error between node and robot
-        direction_vec = [targetx - robotx, targety - roboty]
-        error = np.sqrt(direction_vec[0] ** 2 + direction_vec[1] ** 2)
-        self.alpha = np.arctan2(-direction_vec[1], direction_vec[0])
-
-        if error < self.arrivialthresh:
-            self.current_node += 1
-        
-        #if we reach the end, start over the current_node at 0
-        if self.current_node == len(coordinates):
-            print("back at beginning")
-        
-
-
-
-
-
-
+          
+            pos = robot_list[-1].position_list[-1]
                 
+
+            #define target coordinate
+            targetx = target_coordinates[self.current_node][0]
+            targety = target_coordinates[self.current_node][1]
+
+            #define robots current position
+            robotx = pos[0]
+            roboty = pos[1]
+            
+            #calculate error between node and robot
+            direction_vec = [targetx - robotx, targety - roboty]
+            error = np.sqrt(direction_vec[0] ** 2 + direction_vec[1] ** 2)
+          
+            self.alpha = np.arctan2(-direction_vec[1], direction_vec[0])
+            cv2.arrowedLine(
+                    frame,
+                    (int(robotx), int(roboty)),
+                    (int(targetx), int(targety)),
+                    [0, 0, 0],
+                    3,
+                )
+            cv2.putText(frame,"node = {}/{}".format(self.current_node, len(target_coordinates)),
+                    (int(2000),int(200)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    fontScale=1, 
+                    thickness=4,
+                    color = (255, 255, 255))
+            
+
+            if error < self.arrivialthresh:
+                self.current_node += 1
+
         
-        
-        
-        
+            #if we reach the end, start over the current_node at 0
+            if self.current_node == len(target_coordinates):
+                self.current_node = 0
+
+            #every 40 freq_counter frames incriment the frequency
+            if self.counter % self.freq_interval == 0:
+                self.freq += self.freq_increment
+
+
+            
+
         #output: actions which is the magetnic field commands applied to the arduino
 
-        Bx = 1 #-1 -> 1
+        Bx = 0 #-1 -> 1
         By = 0 #-1 -> 1
         Bz = 0 #-1 -> 1
-        alpha = self.alpha 
-        gamma = 90 #0 -> 180 deg
+        alpha = self.alpha - np.pi/2 
+        gamma = np.pi/2 #0 -> 180 deg
         freq = self.freq #0 -> 180 Hz
-        psi = 0 #0 -> 90 deg
-        gradient = 1 # gradient has to be 1 for the gradient thing to work
+        psi = np.pi/2 #0 -> 90 deg
+        gradient = 0 
         acoustic_freq = 0
         
-        
+        self.counter +=1
+        cv2.putText(frame,"counter = {}".format(self.counter),
+                    (int(2000),int(400)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    fontScale=1, 
+                    thickness=4,
+                    color = (255, 255, 255))
+
         return Bx, By, Bz, alpha, gamma, freq, psi, gradient, acoustic_freq, frame
