@@ -6,13 +6,13 @@ import cv2
 class algorithm:
     def __init__(self):
         self.counter = 0
-        self.current_node = 0 
-        self.arrivialthresh = 15
-        self.node_number = 100
-        self.radius_scale = 5
-        self.freq = 0
-        self.freq_interval = 100
-        self.freq_increment = 1
+        self.current_node = 0  #start at node 0
+        self.arrivialthresh = 50  #if particle within 50 pixels move on
+        self.node_number = 2  #circle made of 100 nodes
+        self.radius_scale = 5  #make circle smaller or largr
+        self.freq = 0   #start at 0
+        self.freq_interval = 50  #evry 50 frames increment the frequency
+        self.freq_increment = 2  #add 1 freq
 
 
     def make_path(self, frame):
@@ -51,8 +51,12 @@ class algorithm:
         output: magnetic field action commands
         """
         # make circle 
-        frame, target_coordinates = self.make_path(frame)
+        #frame, target_coordinates = self.make_path(frame)
         
+        target_coordinates = [[1000,300], [1000, 1900]]
+        pts = np.array(target_coordinates, np.int32)
+        cv2.polylines(frame, [pts], False, (0,0,0), 4)
+
         if len(robot_list) > 0:
             #input:  robot_list which stores all the attributes for each robot you select
 
